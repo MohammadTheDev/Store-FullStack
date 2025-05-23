@@ -1,47 +1,75 @@
-const User = require("../models/User");
-const bcrypt = require("bcryptjs");
-const jwt = require("jsonwebtoken");
+import User from "../models/User.js";
+import bcrypt from "bcryptjs";
+import jwt from "jsonwebtoken";
 
-exports.registerUser = async (req, res) => {
-  const { name, email, password } = req.body;
-
+export const registerUser = async (req, res) => {
   try {
-    let user = await User.findOne({ email });
-    if (user) return res.status(400).json({ msg: "User already exists" });
+    const { name, email, password } = req.body;
 
-    // چک کردن تعداد کاربران موجود
+    if (!name || !email || !password) {
+      return res.status(400).json({ msg: "Please fill all fields" });
+    }
+
+    const existingUser = await User.findOne({ email });
+    if (existingUser) return res.status(400).json({ msg: "User already exists" });
+
     const usersCount = await User.countDocuments();
 
     const hashedPassword = await bcrypt.hash(password, 10);
-    user = new User({
+
+    const user = new User({
       name,
       email,
       password: hashedPassword,
       isAdmin: usersCount === 0, // اولین کاربر ادمین میشه
     });
+
     await user.save();
 
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
-    res.status(201).json({ token, user: { id: user._id, name: user.name, email: user.email, isAdmin: user.isAdmin } });
+
+    res.status(201).json({
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        isAdmin: user.isAdmin,
+      },
+    });
   } catch (err) {
-    console.error(err);
+    console.error("Register Error:", err);
     res.status(500).send("Server error");
   }
 };
 
-exports.loginUser = async (req, res) => {
-  const { email, password } = req.body;
-
+export const loginUser = async (req, res) => {
   try {
+    const { email, password } = req.body;
+
+    if (!email || !password) {
+      return res.status(400).json({ msg: "Please fill all fields" });
+    }
+
     const user = await User.findOne({ email });
     if (!user) return res.status(400).json({ msg: "Invalid credentials" });
+
     const isMatch = await bcrypt.compare(password, user.password);
     if (!isMatch) return res.status(400).json({ msg: "Invalid credentials" });
 
     const token = jwt.sign({ id: user._id }, process.env.JWT_SECRET, { expiresIn: "7d" });
-    res.json({ token, user: { id: user._id, name: user.name, email: user.email } });
+
+    res.json({
+      token,
+      user: {
+        id: user._id,
+        name: user.name,
+        email: user.email,
+        isAdmin: user.isAdmin,
+      },
+    });
   } catch (err) {
-    console.error(err);
+    console.error("Login Error:", err);
     res.status(500).send("Server error");
   }
 };
